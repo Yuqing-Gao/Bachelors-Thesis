@@ -22,7 +22,7 @@ class ImprovedIterationScheme:
         self.solution = []  # initialize solution list for every iteration
         self.all_solutions = []  # initialize solution list
         self.init = None  # used when convergence condition is |u_k+s - u_k| < TOL
-        self.exact_solution = np.full_like(b, 1)
+        self.exact_solution = np.full_like(b, 1)  # exact solution of the given question
         self.ax = plt.gca()
 
     def linear_iteration(self):
@@ -37,7 +37,7 @@ class ImprovedIterationScheme:
         # print(f'solution: {x}, iterations:{self.iterations}')
         # print(f'error={x - self.exact_solution}, norm={np.linalg.norm(x - self.exact_solution, ord=2)}')
 
-    def improved_iteration(self):
+    def improved_iteration(self, if_plot):
         self.iterations = 0  # initialize number of iterations
         while self.iterations <= self.max_iter:
             self.solution = []
@@ -76,6 +76,10 @@ class ImprovedIterationScheme:
                 for i in range(len(self.solution)):
                     lst.append(self.solution[i][j])
                 w1 = self.w1_calculation(lst)
+
+                if w1 == 0:  # if divided by 0, stop iterating
+                    break
+
                 w2 = self.w2_calculation(lst)
                 new_solution.append(-w2 / w1)
 
@@ -87,7 +91,13 @@ class ImprovedIterationScheme:
                 mapping_vectors.append(
                     np.array([-w2 / w1, self.exact_solution[j] + w2 / w1]))  # add new solution to plotting
                 # print(mapping_vectors)
-                # self.plot_points(mapping_vectors, j+1)
+                if if_plot is True:
+                    self.plot_points(mapping_vectors, j+1)
+
+            self.solution.append(np.array(new_solution))
+            if if_plot is True:
+                self.plot_points_norm()
+                self.plot_points_value()
 
             self.iterations += 1  # after calculating a new solution, iterations++
             self.all_solutions.append(np.array(new_solution))  # add new_solution to the solution list
@@ -96,8 +106,7 @@ class ImprovedIterationScheme:
             #     f'error={new_solution - self.exact_solution}, norm={np.linalg.norm(new_solution - self.exact_solution, ord=2)}')
 
             # break when convergence
-            if np.linalg.norm(new_solution - self.initial_value, ord=2) < self.tol or np.linalg.norm(
-                    new_solution - self.exact_solution, ord=2) == 0:
+            if np.linalg.norm(new_solution - self.initial_value, ord=2) < self.tol:
                 break
             # update initial value
             self.initial_value = new_solution
@@ -167,15 +176,14 @@ class ImprovedIterationScheme:
     def plot_points(self, lst, dim):
         self.ax.clear()
 
-        x_values = [point[0] for point in lst]
-        y_values = [point[1] for point in lst]
+        y_values = [point[0] for point in lst]
+        x_values = list(range(self.iterations-5, self.iterations-5+len(lst)))
 
         plt.scatter(x_values, y_values, marker='.', label=f'iter={self.iterations + 1}')
-        for i, point in enumerate(lst):
-            self.ax.annotate(str(i), (point[0], point[1]))
-        plt.xlabel('value')
-        plt.ylabel('error')
-        plt.title(f'iterations={self.iterations + 1}, dim={dim}')
+        plt.axhline(y=self.exact_solution[dim-1])
+        plt.xlabel('number of iterations')
+        plt.ylabel('value')
+        plt.title(f'dim={dim}')
         plt.legend()
         plt.grid(True)
         # plt.show()
@@ -183,6 +191,41 @@ class ImprovedIterationScheme:
         folder_name = f"results/iter_{self.iterations + 1}"
         os.makedirs(folder_name, exist_ok=True)
         file_name = f"{folder_name}/dim_{dim}.png"
+        plt.savefig(file_name)
+
+    def plot_points_norm(self):
+        self.ax.clear()
+
+        folder_name = f"results/iter_{self.iterations + 1}"
+        os.makedirs(folder_name, exist_ok=True)
+        self.ax.clear()
+        x_values = list(range(self.iterations-5, self.iterations-5+len(self.solution)))
+        y_values = [np.linalg.norm(self.exact_solution - point, ord=2) for point in self.solution]
+        plt.scatter(x_values, y_values, marker='.', label='solutions')
+        plt.xlabel(f'number of iterations')
+        plt.ylabel('error in 2-norm')
+        plt.legend()
+        plt.grid(True)
+
+        file_name = f"{folder_name}/error_norm.png"
+        plt.savefig(file_name)
+
+    def plot_points_value(self):
+        self.ax.clear()
+
+        folder_name = f"results/iter_{self.iterations + 1}"
+        os.makedirs(folder_name, exist_ok=True)
+        self.ax.clear()
+        x_values = list(range(self.iterations-5, self.iterations-5+len(self.solution)))
+        y_values = [np.linalg.norm(point, ord=2) for point in self.solution]
+        plt.scatter(x_values, y_values, marker='.', label='solutions')
+        plt.axhline(y=np.linalg.norm(self.exact_solution, ord=2))
+        plt.xlabel(f'number of iterations')
+        plt.ylabel('value in 2-norm')
+        plt.legend()
+        plt.grid(True)
+
+        file_name = f"{folder_name}/value_norm.png"
         plt.savefig(file_name)
 
     def plot_all_solutions(self):
@@ -214,24 +257,40 @@ class ImprovedIterationScheme:
         plt.legend()
         plt.grid(True)
 
-        file_name = f"{folder_name}/norm.png"
+        file_name = f"{folder_name}/error_norm.png"
+        plt.savefig(file_name)
+
+    def plot_all_solutions_value(self):
+        folder_name = "results/all_iterating_solutions"
+        os.makedirs(folder_name, exist_ok=True)
+        self.ax.clear()
+        x_values = list(range(len(self.all_solutions)))
+        y_values = [np.linalg.norm(point, ord=2) for point in self.all_solutions]
+        plt.scatter(x_values, y_values, marker='.', label='solutions')
+        plt.axhline(y=np.linalg.norm(self.exact_solution, ord=2))
+        plt.xlabel('number of iterations')
+        plt.ylabel('value in 2-norm')
+        plt.legend()
+        plt.grid(True)
+
+        file_name = f"{folder_name}/value_norm.png"
         plt.savefig(file_name)
 
 
-def test_s(n_1, n_2):
-    for n in range(n_1, n_2+1):
+def test_s(n_start, n_end, s_range):
+    for n in range(n_start, n_end+1):
         print(f'n={n}')
         np.set_printoptions(precision=16, suppress=True)
         A = np.diag(2 * np.ones(n)) + np.diag(-1 * np.ones(n - 1), k=-1) + np.diag(-1 * np.ones(n - 1), k=1)
         b = np.full(n, 0)
         b[0] = b[-1] = 1
 
-        for s in range(100):
+        for s in range(s_range):
             try:
                 example = ImprovedIterationScheme(tol=1e-8, max_iter=1000, A=A, b=b, initial_value=None, s=s)
                 example.linear_iteration()
                 iter1 = example.iterations
-                example.improved_iteration()
+                example.improved_iteration(if_plot=False)
                 iter2 = example.iterations
                 if iter1 > iter2:
                     print(f's={s}, {iter2}({iter1})')
@@ -255,11 +314,14 @@ def main(n, s):
 
     example = ImprovedIterationScheme(tol=1e-8, max_iter=1000, A=A, b=b, initial_value=None, s=s)
     example.linear_iteration()
-    example.improved_iteration()
+    print(example.iterations)
+    example.improved_iteration(if_plot=True)
+    print(example.iterations)
     example.plot_all_solutions()
     example.plot_all_solutions_norm()
+    example.plot_all_solutions_value()
 
 
 if __name__ == "__main__":
-    # test_s(4, 6)
-    main(5, 5)
+    # test_s(n_start=4, n_end=6, s_range=100)
+    main(n=5, s=5)
