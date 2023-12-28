@@ -1,5 +1,6 @@
 import numpy as np
 import matplotlib.pyplot as plt
+from matplotlib.cm import ScalarMappable
 import os
 
 
@@ -98,6 +99,8 @@ class ImprovedIterationScheme:
             if if_plot is True:
                 self.plot_points_norm()
                 self.plot_points_value()
+
+            new_solution = new_solution + 0.005 * (new_solution - self.initial_value) * (1 / self.iterations)  # ?
 
             self.iterations += 1  # after calculating a new solution, iterations++
             self.all_solutions.append(np.array(new_solution))  # add new_solution to the solution list
@@ -276,6 +279,55 @@ class ImprovedIterationScheme:
         file_name = f"{folder_name}/value_norm.png"
         plt.savefig(file_name)
 
+    def plot_all_solutions_value_3d(self):
+        # do if n = 3:
+        folder_name = "results/all_iterating_solutions"
+        os.makedirs(folder_name, exist_ok=True)
+
+        fig = plt.figure()
+        ax = fig.add_subplot(111, projection='3d')
+        num_points = len(self.all_solutions)
+        colors = np.arange(num_points)
+        cmap = plt.get_cmap('viridis')
+        normalize = plt.Normalize(vmin=colors.min(), vmax=colors.max())
+        scalar_map = ScalarMappable(cmap=cmap, norm=normalize)
+
+        for i in range(num_points):
+            color_val = scalar_map.to_rgba(colors[i])
+            ax.scatter(self.all_solutions[i][0], self.all_solutions[i][1], self.all_solutions[i][2], c=[color_val], cmap='viridis', s=50)
+
+        scalar_map.set_array(colors)
+        cbar = plt.colorbar(scalar_map)
+        cbar.set_label('Index')
+
+        file_name = f"{folder_name}/value.png"
+        plt.savefig(file_name)
+        plt.show()
+
+    def plot_all_solutions_value_2d(self):
+        plt.figure()
+        # do if n = 2:
+        folder_name = "results/all_iterating_solutions"
+        os.makedirs(folder_name, exist_ok=True)
+
+        num_points = len(self.all_solutions)
+        colors = np.arange(num_points)
+        cmap = plt.get_cmap('viridis')
+        normalize = plt.Normalize(vmin=colors.min(), vmax=colors.max())
+        scalar_map = ScalarMappable(cmap=cmap, norm=normalize)
+
+        for i in range(num_points):
+            color_val = scalar_map.to_rgba(colors[i])
+            plt.scatter(self.all_solutions[i][0], self.all_solutions[i][1], c=[color_val], cmap='viridis', s=50)
+
+        scalar_map.set_array(colors)
+        cbar = plt.colorbar(scalar_map)
+        cbar.set_label('Index')
+
+        file_name = f"{folder_name}/value.png"
+        plt.savefig(file_name)
+        plt.show()
+
 
 def test_s(n_start, n_end, s_range):
     for n in range(n_start, n_end+1):
@@ -320,8 +372,12 @@ def main(n, s):
     example.plot_all_solutions()
     example.plot_all_solutions_norm()
     example.plot_all_solutions_value()
+    if n == 3:
+        example.plot_all_solutions_value_3d()
+    elif n == 2:
+        example.plot_all_solutions_value_2d()
 
 
 if __name__ == "__main__":
-    # test_s(n_start=4, n_end=6, s_range=100)
-    main(n=5, s=5)
+    # test_s(n_start=2, n_end=2, s_range=100)
+    main(n=3, s=4)
