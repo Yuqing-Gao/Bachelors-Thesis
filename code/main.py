@@ -22,7 +22,7 @@ class ImprovedIterationScheme:
         self.dim = 0  # dimension of solution vector
         self.solution = []  # initialize solution list for every iteration
         self.all_solutions = []  # initialize solution list
-        self.init = None  # used when convergence condition is |u_k+s - u_k| < TOL
+        self.init_start = None  # u^bar_k
         self.exact_solution = np.full_like(b, 1)  # exact solution of the given question
         self.ax = plt.gca()
 
@@ -45,42 +45,39 @@ class ImprovedIterationScheme:
             results = []
 
             # do if convergence condition is |u_k+s - u_k| < TOL
-            mark = 0
-            for _ in range(self.s):
-                x = self.jacobi()
-                results.append({'solution': x, 'iterations': self.iterations})
-                self.initial_value = x
-                if mark == 0:
-                    self.init = self.initial_value
-                mark += 1
-            mark = 0
-            self.initial_value = self.init
-
-            # do if convergence condition is |u_k+s - u_k+s-1| < TOL
+            # self.init_start = self.initial_value  # record u^bar_k
+            # results.append({'solution': self.initial_value, 'iterations': self.iterations})  # add the first initial value to solution list
             # for _ in range(self.s):
             #     x = self.jacobi()
             #     results.append({'solution': x, 'iterations': self.iterations})
             #     self.initial_value = x
 
+            # do if convergence condition is |u_k+s - u_k+s-1| < TOL
+            for _ in range(self.s):
+                x = self.jacobi()
+                results.append({'solution': x, 'iterations': self.iterations})
+                self.initial_value = x
+
             # print(results)
+            # add the iterating solutions to solution list
             for item in results:
                 self.solution.append(item['solution'])
                 self.all_solutions.append(item['solution'])
                 self.dim = len(item['solution'])
 
-            new_solution = []
+            new_solution = []  # list to restore new solution calculated by -w2/w1
             for j in range(self.dim):
-                lst = []  # s vectors to calculate new solution in the next step
+                lst = []  # s+1 vectors to calculate new solution in the next step
                 mapping_vectors = []  # s+1 vectors, mapped from u_j to (u_j, u_exact - u_j) by each dimension for plotting
 
                 # calculate new solution
                 for i in range(len(self.solution)):
                     lst.append(self.solution[i][j])
+
                 w1 = self.w1_calculation(lst)
-
                 if w1 == 0:  # if divided by 0, stop iterating
+                    new_solution = self.init_start
                     break
-
                 w2 = self.w2_calculation(lst)
                 new_solution.append(-w2 / w1)
 
@@ -92,24 +89,29 @@ class ImprovedIterationScheme:
                 mapping_vectors.append(
                     np.array([-w2 / w1, self.exact_solution[j] + w2 / w1]))  # add new solution to plotting
                 # print(mapping_vectors)
-                if if_plot is True:
-                    self.plot_points(mapping_vectors, j+1)
+                # if if_plot is True:
+                #     self.plot_points(mapping_vectors, j+1)
 
-            self.solution.append(np.array(new_solution))
-            if if_plot is True:
-                self.plot_points_norm()
-                self.plot_points_value()
+            # new_solution = new_solution + (np.array(new_solution) - np.array(self.initial_value)) * np.exp(-self.iterations ** 2)
+            if self.iterations <= 100:
+                new_solution = self.initial_value + (np.array(new_solution) - self.initial_value) * 1
+            else:
+                new_solution = self.jacobi()
 
-            new_solution = new_solution + 0.005 * (new_solution - self.initial_value) * (1 / self.iterations)  # ?
+            # if if_plot is True:
+            #     self.plot_points_norm()
+            #     self.plot_points_value()
 
             self.iterations += 1  # after calculating a new solution, iterations++
-            self.all_solutions.append(np.array(new_solution))  # add new_solution to the solution list
+
             # print(f'new solution:{new_solution}, iterations={self.iterations}')
             # print(
             #     f'error={new_solution - self.exact_solution}, norm={np.linalg.norm(new_solution - self.exact_solution, ord=2)}')
 
             # break when convergence
-            if np.linalg.norm(new_solution - self.initial_value, ord=2) < self.tol:
+            if np.linalg.norm(np.array(new_solution) - np.array(self.initial_value), ord=2) < self.tol:
+                for i in range(len(self.all_solutions)):
+                    print(self.all_solutions[i], i)
                 break
             # update initial value
             self.initial_value = new_solution
@@ -152,38 +154,17 @@ class ImprovedIterationScheme:
             # stop when convergence
             if np.linalg.norm(x - x_old, ord=2) < self.tol:
                 break
-
-        return x
-
-    def gauss_seidel(self):
-        x = np.array(self.initial_value, dtype=np.double)
-        s = self.s
-        # iterate
-        for _ in range(self.max_iter):
-            x_old = x.copy()
-            # loop over rows
-            for i in range(self.A.shape[0]):
-                x[i] = (self.b[i] - np.dot(self.A[i, :i], x[:i]) - np.dot(self.A[i, (i + 1):], x_old[(i + 1):])) / \
-                       self.A[i, i]
-            self.iterations += 1
-            # when s is set to 0, go on until convergence
-            if s != 0:
-                s -= 1
-                break
-            # stop when convergence
-            if np.linalg.norm(x - x_old, ord=2) < self.tol:
-                break
-
+            print(x, self.iterations)
         return x
 
     def plot_points(self, lst, dim):
         self.ax.clear()
 
         y_values = [point[0] for point in lst]
-        x_values = list(range(self.iterations-5, self.iterations-5+len(lst)))
+        x_values = list(range(self.iterations - self.s, self.iterations - self.s + len(lst)))
 
         plt.scatter(x_values, y_values, marker='.', label=f'iter={self.iterations + 1}')
-        plt.axhline(y=self.exact_solution[dim-1])
+        plt.axhline(y=self.exact_solution[dim - 1])
         plt.xlabel('number of iterations')
         plt.ylabel('value')
         plt.title(f'dim={dim}')
@@ -202,7 +183,7 @@ class ImprovedIterationScheme:
         folder_name = f"results/iter_{self.iterations + 1}"
         os.makedirs(folder_name, exist_ok=True)
         self.ax.clear()
-        x_values = list(range(self.iterations-5, self.iterations-5+len(self.solution)))
+        x_values = list(range(self.iterations - self.s, self.iterations - self.s + len(self.solution)))
         y_values = [np.linalg.norm(self.exact_solution - point, ord=2) for point in self.solution]
         plt.scatter(x_values, y_values, marker='.', label='solutions')
         plt.xlabel(f'number of iterations')
@@ -216,10 +197,10 @@ class ImprovedIterationScheme:
     def plot_points_value(self):
         self.ax.clear()
 
-        folder_name = f"results/iter_{self.iterations + 1}"
+        folder_name = f"results/iter_{self.iterations}"
         os.makedirs(folder_name, exist_ok=True)
         self.ax.clear()
-        x_values = list(range(self.iterations-5, self.iterations-5+len(self.solution)))
+        x_values = list(range(self.iterations - self.s, self.iterations - self.s + len(self.solution)))
         y_values = [np.linalg.norm(point, ord=2) for point in self.solution]
         plt.scatter(x_values, y_values, marker='.', label='solutions')
         plt.axhline(y=np.linalg.norm(self.exact_solution, ord=2))
@@ -294,7 +275,10 @@ class ImprovedIterationScheme:
 
         for i in range(num_points):
             color_val = scalar_map.to_rgba(colors[i])
-            ax.scatter(self.all_solutions[i][0], self.all_solutions[i][1], self.all_solutions[i][2], c=[color_val], cmap='viridis', s=50)
+            ax.scatter(self.all_solutions[i][0], self.all_solutions[i][1], self.all_solutions[i][2], c=[color_val],
+                       cmap='viridis', s=50)
+            ax.text(self.all_solutions[i][0], self.all_solutions[i][1], self.all_solutions[i][2], str(i), color='black',
+                    fontsize=8)
 
         scalar_map.set_array(colors)
         cbar = plt.colorbar(scalar_map)
@@ -330,14 +314,14 @@ class ImprovedIterationScheme:
 
 
 def test_s(n_start, n_end, s_range):
-    for n in range(n_start, n_end+1):
+    for n in range(n_start, n_end + 1):
         print(f'n={n}')
         np.set_printoptions(precision=16, suppress=True)
         A = np.diag(2 * np.ones(n)) + np.diag(-1 * np.ones(n - 1), k=-1) + np.diag(-1 * np.ones(n - 1), k=1)
         b = np.full(n, 0)
         b[0] = b[-1] = 1
 
-        for s in range(s_range):
+        for s in range(1, s_range):
             try:
                 example = ImprovedIterationScheme(tol=1e-8, max_iter=1000, A=A, b=b, initial_value=None, s=s)
                 example.linear_iteration()
@@ -347,7 +331,7 @@ def test_s(n_start, n_end, s_range):
                 if iter1 > iter2:
                     print(f's={s}, {iter2}({iter1})')
             except Exception as e:
-                print(f"Error in iteration {s}: {e}")
+                print(f"Error in s = {s}: {e}")
                 continue
 
 
@@ -364,7 +348,7 @@ def main(n, s):
     b = np.full(n, 0)
     b[0] = b[-1] = 1
 
-    example = ImprovedIterationScheme(tol=1e-8, max_iter=1000, A=A, b=b, initial_value=None, s=s)
+    example = ImprovedIterationScheme(tol=1e-8, max_iter=200, A=A, b=b, initial_value=None, s=s)
     example.linear_iteration()
     print(example.iterations)
     example.improved_iteration(if_plot=True)
@@ -379,5 +363,5 @@ def main(n, s):
 
 
 if __name__ == "__main__":
-    # test_s(n_start=2, n_end=2, s_range=100)
-    main(n=3, s=4)
+    # test_s(n_start=3, n_end=3, s_range=50)
+    main(n=3, s=5)
