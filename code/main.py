@@ -1,367 +1,199 @@
 import numpy as np
-import matplotlib.pyplot as plt
-from matplotlib.cm import ScalarMappable
-import os
-
-
-# 1. set k = 1 (use k = 0 instead in python)
-# 2. attain u_k+1, ..., u_k+s-1 by linear iteration method
-# 3. derive u_k+s by accelerating method using u_k to u_k+s-1
-# 4. if convergence, stop. Else do 2 and 3 again where u_k+s is considered as initial value
 
 
 class ImprovedIterationScheme:
-    def __init__(self, tol, max_iter, A, b, initial_value, s):
+    def __init__(self, tol, max_iter, A, b, exact_solution, initial_value, s):
         self.tol = tol  # convergence toleration of iterative algorithm
-        self.max_iter = max_iter  # max iterations
+        self.max_iter = max_iter  # max iterations allowed
         self.A = A
         self.b = b  # s.t. Ax = b
         self.initial_value = np.zeros_like(b) if initial_value is None else initial_value  # initial guess x_0
         self.s = s  # extrapolation parameter
-        self.iterations = 0  # count of iterations
-        self.dim = 0  # dimension of solution vector
-        self.solution = []  # initialize solution list for every iteration
+        self.iterations = 0  # count of linear iterations
+        self.dim = len(self.b)  # dimension of solution vector
         self.all_solutions = []  # initialize solution list
-        self.init_start = None  # u^bar_k
-        self.exact_solution = np.full_like(b, 1)  # exact solution of the given question
-        self.ax = plt.gca()
+        self.exact_solution = exact_solution  # exact solution of the given question
+        self.lst1 = []  # lst to record the results of jacobi's method
+        self.lst2 = []  # lst to record the results of improved method
 
     def linear_iteration(self):
         # perform linear iteration method until convergence
-        self.iterations = 0  # initialize number of iterations
-        # when only performing linear iteration, set extrapolation parameter to 0
-        temp = self.s
-        self.s = 0
-        x = self.jacobi()
-        self.s = temp
-        # print results
-        # print(f'solution: {x}, iterations:{self.iterations}')
-        # print(f'error={x - self.exact_solution}, norm={np.linalg.norm(x - self.exact_solution, ord=2)}')
-
-    def improved_iteration(self, if_plot):
-        self.iterations = 0  # initialize number of iterations
-        while self.iterations <= self.max_iter:
-            self.solution = []
-            results = []
-
-            # do if convergence condition is |u_k+s - u_k| < TOL
-            # self.init_start = self.initial_value  # record u^bar_k
-            # results.append({'solution': self.initial_value, 'iterations': self.iterations})  # add the first initial value to solution list
-            # for _ in range(self.s):
-            #     x = self.jacobi()
-            #     results.append({'solution': x, 'iterations': self.iterations})
-            #     self.initial_value = x
-
-            # do if convergence condition is |u_k+s - u_k+s-1| < TOL
-            for _ in range(self.s):
-                x = self.jacobi()
-                results.append({'solution': x, 'iterations': self.iterations})
-                self.initial_value = x
-
-            # print(results)
-            # add the iterating solutions to solution list
-            for item in results:
-                self.solution.append(item['solution'])
-                self.all_solutions.append(item['solution'])
-                self.dim = len(item['solution'])
-
-            new_solution = []  # list to restore new solution calculated by -w2/w1
-            for j in range(self.dim):
-                lst = []  # s+1 vectors to calculate new solution in the next step
-                mapping_vectors = []  # s+1 vectors, mapped from u_j to (u_j, u_exact - u_j) by each dimension for plotting
-
-                # calculate new solution
-                for i in range(len(self.solution)):
-                    lst.append(self.solution[i][j])
-
-                w1 = self.w1_calculation(lst)
-                if w1 == 0:  # if divided by 0, stop iterating
-                    new_solution = self.init_start
-                    break
-                w2 = self.w2_calculation(lst)
-                new_solution.append(-w2 / w1)
-
-                # plotting
-                for i in range(len(self.solution)):
-                    mapping_vectors.append(
-                        np.array([self.solution[i][j],
-                                  self.exact_solution[j] - self.solution[i][j]]))  # add former s solutions to plotting
-                mapping_vectors.append(
-                    np.array([-w2 / w1, self.exact_solution[j] + w2 / w1]))  # add new solution to plotting
-                # print(mapping_vectors)
-                # if if_plot is True:
-                #     self.plot_points(mapping_vectors, j+1)
-
-            # new_solution = new_solution + (np.array(new_solution) - np.array(self.initial_value)) * np.exp(-self.iterations ** 2)
-            if self.iterations <= 100:
-                new_solution = self.initial_value + (np.array(new_solution) - self.initial_value) * 1
-            else:
-                new_solution = self.jacobi()
-
-            # if if_plot is True:
-            #     self.plot_points_norm()
-            #     self.plot_points_value()
-
-            self.iterations += 1  # after calculating a new solution, iterations++
-
-            # print(f'new solution:{new_solution}, iterations={self.iterations}')
-            # print(
-            #     f'error={new_solution - self.exact_solution}, norm={np.linalg.norm(new_solution - self.exact_solution, ord=2)}')
-
-            # break when convergence
-            if np.linalg.norm(np.array(new_solution) - np.array(self.initial_value), ord=2) < self.tol:
-                for i in range(len(self.all_solutions)):
-                    print(self.all_solutions[i], i)
-                break
-            # update initial value
-            self.initial_value = new_solution
-
-    @staticmethod
-    def w1_calculation(lst):
-        total_sum = 0
-        for k in range(len(lst) - 1):
-            inner_sum = 0
-            for j in range(len(lst) - 1):
-                inner_sum += lst[k] - lst[j]
-            total_sum += (lst[k + 1] - lst[k]) * inner_sum
-        return total_sum
-
-    @staticmethod
-    def w2_calculation(lst):
-        total_sum = 0
-        for k in range(len(lst) - 1):
-            inner_sum = 0
-            for j in range(len(lst) - 1):
-                inner_sum += lst[j] ** 2 - lst[j] * lst[k]
-            total_sum += (lst[k + 1] - lst[k]) * inner_sum
-        return total_sum
-
-    def jacobi(self):
+        self.iterations = 0  # initialize
         x = np.array(self.initial_value, dtype=np.double)
-        s = self.s
+        self.lst1.append(x)
+
         # iterate
-        for _ in range(self.max_iter):
+        while self.iterations <= self.max_iter:
             x_old = x.copy()
-            # loop over rows
-            for i in range(self.A.shape[0]):
-                x[i] = (self.b[i] - np.dot(self.A[i, :i], x_old[:i]) - np.dot(self.A[i, (i + 1):], x_old[(i + 1):])) / \
-                       self.A[i, i]
-            self.iterations += 1
-            # when s is set to 0, go on until convergence
-            if s != 0:
-                s -= 1
-                break
+            x = self.jacobi(x_old)
+            self.lst1.append(x)
             # stop when convergence
             if np.linalg.norm(x - x_old, ord=2) < self.tol:
                 break
-            print(x, self.iterations)
-        return x
+        # print(self.lst1, len(self.lst1)-1)
 
-    def plot_points(self, lst, dim):
-        self.ax.clear()
+    def improved_iteration(self, if_theta):
+        self.iterations = 0  # initialize
+        pointer = 0  # decide where to start to calculate the extrapolation solution
 
-        y_values = [point[0] for point in lst]
-        x_values = list(range(self.iterations - self.s, self.iterations - self.s + len(lst)))
+        while self.iterations <= self.max_iter:
+            self.initial_value = np.array(self.initial_value, dtype=np.double)
+            self.lst2.append(self.initial_value)
+            # do linear iterations for s times
+            for _ in range(self.s):
+                x_old = self.initial_value.copy()
+                self.initial_value = self.jacobi(x_old)
+                self.lst2.append(self.initial_value)
+                if np.linalg.norm(np.array(x_old) - np.array(self.initial_value), ord=2) < self.tol:
+                    self.iterations += 1
+                    return  # stop iterating
 
-        plt.scatter(x_values, y_values, marker='.', label=f'iter={self.iterations + 1}')
-        plt.axhline(y=self.exact_solution[dim - 1])
-        plt.xlabel('number of iterations')
-        plt.ylabel('value')
-        plt.title(f'dim={dim}')
-        plt.legend()
-        plt.grid(True)
-        # plt.show()
+            calculating_vectors = []  # s+1 vectors to calculate new solution in the next step
+            for i in range(self.s + 1):
+                calculating_vectors.append(self.lst2[pointer + i])
+            # print(calculating_vectors)
+            new_solution = self.extrapolation(calculating_vectors)  # calculate new solution
 
-        folder_name = f"results/iter_{self.iterations + 1}"
-        os.makedirs(folder_name, exist_ok=True)
-        file_name = f"{folder_name}/dim_{dim}.png"
-        plt.savefig(file_name)
+            if if_theta is True:
+                theta = self.calculate_theta(new_solution)  # calculate theta
+                if self.iterations <= 100:
+                    new_solution = self.initial_value + (np.array(new_solution) - self.initial_value) * theta
+                else:
+                    new_solution = self.jacobi(new_solution)
 
-    def plot_points_norm(self):
-        self.ax.clear()
+            # break when convergence
+            if np.linalg.norm(np.array(new_solution) - np.array(self.initial_value), ord=2) < self.tol:
+                self.iterations += 1
+                break
+            self.iterations += 1
+            pointer += self.s + 1
+            self.initial_value = new_solution
 
-        folder_name = f"results/iter_{self.iterations + 1}"
-        os.makedirs(folder_name, exist_ok=True)
-        self.ax.clear()
-        x_values = list(range(self.iterations - self.s, self.iterations - self.s + len(self.solution)))
-        y_values = [np.linalg.norm(self.exact_solution - point, ord=2) for point in self.solution]
-        plt.scatter(x_values, y_values, marker='.', label='solutions')
-        plt.xlabel(f'number of iterations')
-        plt.ylabel('error in 2-norm')
-        plt.legend()
-        plt.grid(True)
+        # print(self.lst2, len(self.lst2)-1)
 
-        file_name = f"{folder_name}/error_norm.png"
-        plt.savefig(file_name)
+    def calculate_theta(self, new_solution):
+        """
+        :param new_solution: solution that calculate by extrapolation
+        :return: parameter to accelerate convergence
+        """
+        r = self.A @ self.initial_value - self.b
+        delta_uk = np.array(new_solution) - np.array(self.initial_value)
+        numerator = np.transpose(delta_uk) @ np.transpose(self.A) @ r
+        denominator = np.transpose(delta_uk) @ np.transpose(self.A) @ self.A @ delta_uk
+        # print(f'r={r}, delta_uk={delta_uk}, numerator={numerator}, denominator={denominator}r')
+        if denominator == 0:
+            theta = 0  # denominator = 0 indicates delta_uk is null vector (?)
+        else:
+            theta = - numerator / denominator
+        return theta
 
-    def plot_points_value(self):
-        self.ax.clear()
+    def extrapolation(self, calculating_vectors):
+        """
+        :param calculating_vectors: s+1 solutions
+        :return: 1 extrapolation solution
+        """
+        new_solution = []  # list to restore new solution calculated by -w2/w1
+        for j in range(self.dim):
+            lst = []  # s+1 scalars to calculate new solution in the next step
 
-        folder_name = f"results/iter_{self.iterations}"
-        os.makedirs(folder_name, exist_ok=True)
-        self.ax.clear()
-        x_values = list(range(self.iterations - self.s, self.iterations - self.s + len(self.solution)))
-        y_values = [np.linalg.norm(point, ord=2) for point in self.solution]
-        plt.scatter(x_values, y_values, marker='.', label='solutions')
-        plt.axhline(y=np.linalg.norm(self.exact_solution, ord=2))
-        plt.xlabel(f'number of iterations')
-        plt.ylabel('value in 2-norm')
-        plt.legend()
-        plt.grid(True)
+            for i in range(len(calculating_vectors)):
+                lst.append(calculating_vectors[i][j])
 
-        file_name = f"{folder_name}/value_norm.png"
-        plt.savefig(file_name)
+            # calculate w1
+            w1 = 0
+            for k in range(len(lst) - 1):
+                inner_sum = 0
+                for j in range(len(lst) - 1):
+                    inner_sum += lst[k] - lst[j]
+                w1 += (lst[k + 1] - lst[k]) * inner_sum
+            # if divided by 0, stop iterating
+            if w1 == 0:
+                new_solution = self.initial_value
+                break
+            # calculate w2
+            w2 = 0
+            for k in range(len(lst) - 1):
+                inner_sum = 0
+                for j in range(len(lst) - 1):
+                    inner_sum += lst[j] ** 2 - lst[j] * lst[k]
+                w2 += (lst[k + 1] - lst[k]) * inner_sum
 
-    def plot_all_solutions(self):
-        folder_name = "results/all_iterating_solutions"
-        os.makedirs(folder_name, exist_ok=True)
+            # calculate extrapolation solution
+            new_solution.append(-w2 / w1)
+        return new_solution
+
+    def jacobi(self, x_old):
+        """
+        :param x_old: current solution
+        :return: next solution after iterate once
+        """
+        x_new = np.zeros_like(self.b, dtype=np.double)
         for i in range(self.dim):
-            self.ax.clear()
-            x_values = list(range(len(self.all_solutions)))
-            y_values = [self.exact_solution[i] - point[i] for point in self.all_solutions]
-            plt.scatter(x_values, y_values, marker='.', label='solutions')
-            plt.xlabel('number of iterations')
-            plt.ylabel('error')
-            plt.title(f'dim={i + 1}')
-            plt.legend()
-            plt.grid(True)
+            x_new[i] = (self.b[i] - np.dot(self.A[i, :i], x_old[:i]) - np.dot(self.A[i, (i + 1):], x_old[(i + 1):])) / \
+                       self.A[i, i]
+        self.iterations += 1
+        return x_new
 
-            file_name = f"{folder_name}/dim_{i + 1}.png"
-            plt.savefig(file_name)
 
-    def plot_all_solutions_norm(self):
-        folder_name = "results/all_iterating_solutions"
-        os.makedirs(folder_name, exist_ok=True)
-        self.ax.clear()
-        x_values = list(range(len(self.all_solutions)))
-        y_values = [np.linalg.norm(self.exact_solution - point, ord=2) for point in self.all_solutions]
-        plt.scatter(x_values, y_values, marker='.', label='solutions')
-        plt.xlabel('number of iterations')
-        plt.ylabel('error in 2-norm')
-        plt.legend()
-        plt.grid(True)
-
-        file_name = f"{folder_name}/error_norm.png"
-        plt.savefig(file_name)
-
-    def plot_all_solutions_value(self):
-        folder_name = "results/all_iterating_solutions"
-        os.makedirs(folder_name, exist_ok=True)
-        self.ax.clear()
-        x_values = list(range(len(self.all_solutions)))
-        y_values = [np.linalg.norm(point, ord=2) for point in self.all_solutions]
-        plt.scatter(x_values, y_values, marker='.', label='solutions')
-        plt.axhline(y=np.linalg.norm(self.exact_solution, ord=2))
-        plt.xlabel('number of iterations')
-        plt.ylabel('value in 2-norm')
-        plt.legend()
-        plt.grid(True)
-
-        file_name = f"{folder_name}/value_norm.png"
-        plt.savefig(file_name)
-
-    def plot_all_solutions_value_3d(self):
-        # do if n = 3:
-        folder_name = "results/all_iterating_solutions"
-        os.makedirs(folder_name, exist_ok=True)
-
-        fig = plt.figure()
-        ax = fig.add_subplot(111, projection='3d')
-        num_points = len(self.all_solutions)
-        colors = np.arange(num_points)
-        cmap = plt.get_cmap('viridis')
-        normalize = plt.Normalize(vmin=colors.min(), vmax=colors.max())
-        scalar_map = ScalarMappable(cmap=cmap, norm=normalize)
-
-        for i in range(num_points):
-            color_val = scalar_map.to_rgba(colors[i])
-            ax.scatter(self.all_solutions[i][0], self.all_solutions[i][1], self.all_solutions[i][2], c=[color_val],
-                       cmap='viridis', s=50)
-            ax.text(self.all_solutions[i][0], self.all_solutions[i][1], self.all_solutions[i][2], str(i), color='black',
-                    fontsize=8)
-
-        scalar_map.set_array(colors)
-        cbar = plt.colorbar(scalar_map)
-        cbar.set_label('Index')
-
-        file_name = f"{folder_name}/value.png"
-        plt.savefig(file_name)
-        plt.show()
-
-    def plot_all_solutions_value_2d(self):
-        plt.figure()
-        # do if n = 2:
-        folder_name = "results/all_iterating_solutions"
-        os.makedirs(folder_name, exist_ok=True)
-
-        num_points = len(self.all_solutions)
-        colors = np.arange(num_points)
-        cmap = plt.get_cmap('viridis')
-        normalize = plt.Normalize(vmin=colors.min(), vmax=colors.max())
-        scalar_map = ScalarMappable(cmap=cmap, norm=normalize)
-
-        for i in range(num_points):
-            color_val = scalar_map.to_rgba(colors[i])
-            plt.scatter(self.all_solutions[i][0], self.all_solutions[i][1], c=[color_val], cmap='viridis', s=50)
-
-        scalar_map.set_array(colors)
-        cbar = plt.colorbar(scalar_map)
-        cbar.set_label('Index')
-
-        file_name = f"{folder_name}/value.png"
-        plt.savefig(file_name)
-        plt.show()
+def initialization(n):
+    """
+    :param n: dimension of the given question
+    :return: matrix A, vector b, exact solution
+    """
+    np.set_printoptions(precision=16, suppress=True)
+    A = np.diag(2 * np.ones(n)) + np.diag(-1 * np.ones(n - 1), k=-1) + np.diag(-1 * np.ones(n - 1), k=1)
+    b = np.full(n, 0)
+    b[0] = b[-1] = 1
+    exact_solution = np.full_like(b, 1)
+    return A, b, exact_solution
 
 
 def test_s(n_start, n_end, s_range):
     for n in range(n_start, n_end + 1):
         print(f'n={n}')
-        np.set_printoptions(precision=16, suppress=True)
-        A = np.diag(2 * np.ones(n)) + np.diag(-1 * np.ones(n - 1), k=-1) + np.diag(-1 * np.ones(n - 1), k=1)
-        b = np.full(n, 0)
-        b[0] = b[-1] = 1
+        A, b, exact_solution = initialization(n)
 
-        for s in range(1, s_range):
+        for s in range(3, s_range):
             try:
-                example = ImprovedIterationScheme(tol=1e-8, max_iter=1000, A=A, b=b, initial_value=None, s=s)
-                example.linear_iteration()
-                iter1 = example.iterations
-                example.improved_iteration(if_plot=False)
-                iter2 = example.iterations
-                if iter1 > iter2:
-                    print(f's={s}, {iter2}({iter1})')
+                test_case1 = ImprovedIterationScheme(tol=1e-8, max_iter=200, A=A, b=b, exact_solution=exact_solution,
+                                                     initial_value=None, s=s)
+                test_case2 = ImprovedIterationScheme(tol=1e-8, max_iter=200, A=A, b=b, exact_solution=exact_solution,
+                                                     initial_value=None, s=s)
+                test_case3 = ImprovedIterationScheme(tol=1e-8, max_iter=200, A=A, b=b, exact_solution=exact_solution,
+                                                     initial_value=None, s=s)
+                test_case1.linear_iteration()
+                iter1 = test_case1.iterations
+                test_case2.improved_iteration(if_theta=False)
+                iter2 = test_case2.iterations
+                test_case3.improved_iteration(if_theta=True)
+                iter3 = test_case3.iterations
+                if iter1 > iter2 and iter3 >= iter2:
+                    print(f's={s}, {iter2}({iter1}), if theta is added:{iter3}')
+                elif iter1 > iter2 > iter3:
+                    print(f's={s}, {iter2}({iter1}), if theta is added:{iter3} *')
             except Exception as e:
                 print(f"Error in s = {s}: {e}")
                 continue
 
 
-def main(n, s):
-    np.set_printoptions(precision=16, suppress=True)
-    # A = np.array([[2, -1, 0, 0],
-    #               [-1, 2, -1, 0],
-    #               [0, -1, 2, -1],
-    #               [0, 0, -1, 2]])
-    #
-    # b = np.array([1, 0, 0, 1])
-
-    A = np.diag(2 * np.ones(n)) + np.diag(-1 * np.ones(n - 1), k=-1) + np.diag(-1 * np.ones(n - 1), k=1)
-    b = np.full(n, 0)
-    b[0] = b[-1] = 1
-
-    example = ImprovedIterationScheme(tol=1e-8, max_iter=200, A=A, b=b, initial_value=None, s=s)
-    example.linear_iteration()
-    print(example.iterations)
-    example.improved_iteration(if_plot=True)
-    print(example.iterations)
-    example.plot_all_solutions()
-    example.plot_all_solutions_norm()
-    example.plot_all_solutions_value()
-    if n == 3:
-        example.plot_all_solutions_value_3d()
-    elif n == 2:
-        example.plot_all_solutions_value_2d()
+def test(n, s, if_theta):
+    A, b, exact_solution = initialization(n)
+    test_case1 = ImprovedIterationScheme(tol=1e-8, max_iter=200, A=A, b=b, exact_solution=exact_solution,
+                                         initial_value=None, s=s)
+    test_case1.linear_iteration()
+    test_case2 = ImprovedIterationScheme(tol=1e-8, max_iter=200, A=A, b=b, exact_solution=exact_solution,
+                                         initial_value=None, s=s)
+    test_case2.improved_iteration(if_theta=False)
+    test_case3 = ImprovedIterationScheme(tol=1e-8, max_iter=200, A=A, b=b, exact_solution=exact_solution,
+                                         initial_value=None, s=s)
+    test_case3.improved_iteration(if_theta=True)
+    # save all iterating results to .txt file
+    np.savetxt(r'results/jacobi.txt', test_case1.lst1)
+    np.savetxt(r'results/without_theta.txt', test_case2.lst2)
+    np.savetxt(r'results/with_theta.txt', test_case3.lst2)
+    print(f'jacobi:{test_case1.iterations}, without theta: {test_case2.iterations}, with theta: {test_case3.iterations}')
 
 
 if __name__ == "__main__":
-    # test_s(n_start=3, n_end=3, s_range=50)
-    main(n=3, s=5)
+    # test_s(n_start=2, n_end=7, s_range=50)
+    test(n=6, s=9, if_theta=True)
